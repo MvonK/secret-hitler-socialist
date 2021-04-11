@@ -1,0 +1,12 @@
+/.idea/
+/__pycache__/
+/client/.idea/
+
+# client dependencies
+/client/node_modules/
+
+# client testing
+/client/coverage/
+
+# client production build
+/client/build/
