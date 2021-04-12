@@ -1,6 +1,8 @@
 import redis
 import json
 import logging
+import hashlib
+import datetime
 
 """
 User should not be instantiated directly, you should use UserManager instead. Ideally, there will only be one instance
@@ -28,33 +30,25 @@ class StatsDict(dict):
         super().__init__()
         self.user = user
         self._from_data(kwargs)
+        self.auto_update = True
 
     def __setattr__(self, key, value):
-        self[key] = value
-        self.user._update()
+        if key in self.fields:
+            self[key] = value
+            if self.auto_update:
+                self.user._update()
+        else:
+            super().__setattr__(key, value)
 
     def _from_data(self, data):
+        self.auto_update = False
         for f in self.fields:
             self.__setattr__(f, data.pop(f, 0))
         for unknown_key in data:
             log.warning(f"Unknown stats key `{unknown_key}` with value `{data[unknown_key]}`. Ignored.")
+        self.auto_update = True
+        self.user._update()
 
-
-stats_template = {
-    "lib_wins": 0,
-    "lib_games": 0,
-    "fas_wins": 0,
-    "fas_games": 0,
-    "soc_wins": 0,
-    "soc_games": 0,
-    "hitler_wins": 0,
-    "hitler_games": 0,
-
-    "times_recruited": 0,
-    "times_shot": 0,
-
-    ""
-}
 
 class User:
     all_props = ("uid", "name", "password", "elo", "stats",)
@@ -65,10 +59,16 @@ class User:
             data = {}
         data.update(kwargs)
         self._manager = manager
+        self.update_on = False
         self._from_data(data)
+        self.update_on = True
 
     def _update(self):
-        self._manager._update_user_date(self._uid, self)
+        if self.update_on:
+            log.debug("Updating user")
+            self._manager._update_user_data(self._uid, self)
+        else:
+            log.log(5, "User update blocked")
 
     @property
     def name(self):
@@ -86,6 +86,10 @@ class User:
     def stats(self):
         return self._stats
 
+    @property
+    def uid(self):
+        return self._uid
+
     def edit(self, **kwargs):
         """
         Edits the user data and saves them
@@ -94,7 +98,7 @@ class User:
         """
         for p in self._static_props:
             kwargs.pop(p)
-        self.from_data(kwargs)
+        self._from_data(kwargs)
         self._update()
 
     def _from_data(self, data):
@@ -104,6 +108,7 @@ class User:
         if isinstance(self._stats, dict):
             self._stats = StatsDict(self, **self._stats)
 
+        self._update()
 
     def to_dict(self):
         return {k: self.__getattribute__(k) for k in self.all_props}
@@ -115,10 +120,12 @@ class UserManager:
         self.user_cache = {}
 
     def _get_user_data(self, uid):
-        return self.redis.get(f"user-{uid}")
+        log.debug(f"Retrieving user {uid} from db")
+        return self.redis.get(f"{uid}")
 
     def _set_user_data(self, uid, json_data):
-        self.redis.set(uid, json_data)
+        log.debug(f"Setting user {uid} with data: {json_data}")
+        return self.redis.set(uid, json_data)
 
     def get_user(self, uid):
         """
@@ -129,7 +136,10 @@ class UserManager:
         if uid in self.user_cache:
             return self.user_cache[uid]
 
-        data = json.loads(self._get_user_data(uid))
+        raw_data = self._get_user_data(uid)
+        if raw_data is None:
+            return None
+        data = json.loads(raw_data.decode())
         user = User(self, data)
         self.user_cache[uid] = user
         return user
@@ -141,18 +151,20 @@ class UserManager:
         :param password: User's password
         :return: User created
         """
-        unique_id = self.redis.incr("unique_id")
+        unique_id = self.redis.incr("incremental_id") * 7 + 999999
+        #hsh = hashlib.md5(f"{unique_id}-{datetime.datetime.now()}")
+        uid = f"uid-{unique_id}"
         user = User(manager=self,
                     name=name,
                     password=password,
-                    uid=unique_id,
+                    uid=uid,
                     elo=1500,
                     stats={}
                     )
-        self.user_cache[unique_id] = user
-        self._update_user_data(unique_id, user)
+        self.user_cache[uid] = user
+        self._update_user_data(uid, user)
         return user
 
-    def _update_user_data(self, uid, user):
+    def _update_user_data(self, uid, user: User):
         data = json.dumps(user.to_dict())
         self._set_user_data(uid, data)
