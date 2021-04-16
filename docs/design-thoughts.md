@@ -45,3 +45,7 @@ The game state will also have to contain some private, per-player information. F
 so that has to reflect on the frontend. Game state should be sent out whenever client asks, or whenever the 
 state changes.
 
+### Redis
+Redis is a simple key-value storage. It will be used to store mostly user data, such as ELO, password etc. Every client
+will be assigned a unique UID, when they create a new account. This will also be a key in the redis db, prefixed by
+`user-`. The value will be then json of the user. 
