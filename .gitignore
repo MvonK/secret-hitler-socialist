@@ -13,3 +13,5 @@
 
 # pycaches
 **/__pycache__
+/backend/__pycache__
+/shitler_core/__pycache__

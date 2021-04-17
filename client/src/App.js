@@ -8,7 +8,7 @@ function App() {
   return (
     <div className="App">
       <h1>
-        Hello from React!
+        Secret Hitler (at some point, hopefully)!
       </h1>
       <LoginBlock/>
       <BrowserRouter>
@@ -21,7 +21,8 @@ function App() {
                   Nothing
                 </td>
                 <td>
-                  <ChatBlock style={{
+                  <ChatBlock roomName={"general"}
+                    style={{
                     backgroundColor: "lightblue",
                     minWidth: "550px",
                     minHeight: "350px",

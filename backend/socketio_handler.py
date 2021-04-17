@@ -1,5 +1,5 @@
 import flask_socketio as fsio
-from flask import request, session
+import flask as fl
 import string
 import redis
 from backend.errors import *
@@ -19,14 +19,14 @@ def validate_username(username):
 
 class UserContext:
     def __init__(self, user_manager, game_manager, get_game=False):
-        self.sid = request.sid
-        uid = session.get("uid")
+        self.sid = fl.request.sid
+        uid = fl.session.get("uid")
         if uid is None:
             raise NotLoggedIn("You are not logged in")
 
         user = user_manager.get_user(uid)
         if user is None:
-            del session["uid"]
+            del fl.session["uid"]
             raise UserDoesntExist("That user does not exist")
 
         self.rooms = set()
@@ -43,14 +43,22 @@ class UserContext:
         self.game = game
 
     def reconnect(self):
-        self.sid = request.sid
+        self.sid = fl.request.sid
         for r in self.rooms:
             r.user_join(self)
+
+    def disconnect(self):
+        log.debug(f"User {self.user.uid} disconnecting")
+        fsio.disconnect(self.sid, namespace="/")
+        return bool(self.game)
 
 
 class ChatRoom:
     def __init__(self, name):
         self.name = name
+
+    def __repr__(self):
+        return f"Chatroom({self.name})"
 
     def send(self, author="server", content="empty content"):
         log.debug(f"room {self.name} sending out message {author}: {content}")
@@ -68,9 +76,15 @@ class ChatRoom:
         fsio.close_room(self.name)
 
 
-def error_wrap():
+def event_wrap(get_context=True, get_context_game=False):
     def wrapgen(fn):
         def wrapper(*args, **kwargs):
+            if get_context:
+                try:
+                    ctx = args[0].get_user_context(get_context_game)
+                except (NotLoggedIn, UserDoesntExist):
+                    ctx = None
+                kwargs["ctx"] = ctx
             try:
                 return fn(*args, **kwargs)
             except UserNotInRoom as e:
@@ -80,52 +94,77 @@ def error_wrap():
 
 
 class GameNamespace(fsio.Namespace):
-    def __init__(self, path, user_manager, game_manager):
+    def __init__(self, path, user_manager, game_manager, sio):
         super().__init__(path)
         self.user_manager = user_manager
         self.game_manager = game_manager
-        self.active_sessions = {}
+        self.sio = sio
+        self.active_sessions = {}  # format is `SID: user context`
+        self.resting_sessions = []  # format is `SID: user context`, used for users who may want to reconnect
         self.chat_rooms = {"general": ChatRoom("general")}
 
     def get_user_context(self, get_game=False):
-        if request.sid in self.active_sessions:
-            active_session = self.active_sessions[request.sid]
+        if fl.request.sid in self.active_sessions:
+            active_session = self.active_sessions[fl.request.sid]
             if not get_game or active_session.game is not None:
                 return active_session
             else:
                 active_session.get_game(self.game_manager)
         ctx = UserContext(self.user_manager, self.game_manager, get_game=get_game)
-        self.active_sessions[request.sid] = ctx
+        self.active_sessions[fl.request.sid] = ctx
         return ctx
 
     def attempt_reconnect(self):
-        if session.get("uid"):
-            for k, v in self.active_sessions.items():
-                if v.user.uid == session["uid"]:
-                    self.active_sessions[request.sid] = v
-                    del self.active_sessions[k]
+        if fl.session.get("uid"):
+            for v in self.resting_sessions:
+                if v.user.uid == fl.session["uid"]:
+                    self.active_sessions[fl.request.sid] = v
+                    self.resting_sessions.pop(v, None)
                     v.reconnect()
                     log.info(f"User {v.user.uid} has been reconnected!")
                     return True
-
         return False
 
-    def on_connect(self):
-        log.info("Client trying to connect omg")
-        session["uid"] = "uid-1000020"
+    def on_error(self, error):
+        log.error(f"Error happened: {error}")
 
-        fsio.emit("chatMessageCreate", {"author": "server", "content": "Ur trying to connect omggg"})
+    def disconnect_user(self, uid):
+        for k, v in self.active_sessions.items():
+            if v.user.uid == uid:
+                self._disconnect(v)
+                break
+
+    def _disconnect(self, ctx):
+        if not ctx:
+            log.debug("Disconnecting from empty context?")
+            return
+        log.debug(f"SIO disconnecting user {ctx.user.uid}")
+        del self.active_sessions[ctx.sid]
+        if ctx.disconnect():
+            self.resting_sessions.append(ctx)
+
+    def on_connect(self):
+        log.info(f"Client trying to connect {dict(fl.session)}")
+        # session["uid"] = "uid-1000020"
+
+        fsio.emit("chatMessageCreate", {"author": "server", "content": "Ur trying to connect omggg", "room": "general"})
         if not self.attempt_reconnect():
             try:
                 ctx = self.get_user_context()
                 self.chat_rooms["general"].user_join(ctx)
+                self.on_fetchLoginInfo()
+                log.debug(f"User {ctx.user.name} now connected successfully. Uid stored in session is {fl.session.get('uid')}")
             except (NotLoggedIn, UserDoesntExist):
+                self.active_sessions.pop(fl.request.sid, None)
                 raise ConnectionRefusedError("Not logged in")
 
-    @error_wrap()
-    def on_chatMessageSend(self, message):
+    @event_wrap()
+    def on_disconnect(self, ctx):
+        self._disconnect(ctx)
+
+    @event_wrap()
+    def on_chatMessageSend(self, message, ctx):
         log.debug(f"Message received: {message}")
-        ctx = self.get_user_context()
 
         room_name = message.get("room", "default")
         target_room = self.chat_rooms.get(room_name)
@@ -135,3 +174,7 @@ class GameNamespace(fsio.Namespace):
 
         target_room.send(author=ctx.user.name, content=message["content"])
 
+    @event_wrap()
+    def on_fetchLoginInfo(self, ctx):
+        log.debug(f"User {ctx.user.name} fetching login info")
+        fsio.emit("loginInfo", ctx.user.to_dict(include_password=False))

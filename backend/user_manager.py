@@ -11,6 +11,7 @@ of UserManager, to prevent conflicts.
 
 log = logging.getLogger("user-manager")
 
+
 class StatsDict(dict):
     fields = (
         "lib_wins",
@@ -110,14 +111,22 @@ class User:
 
         self._update()
 
-    def to_dict(self):
-        return {k: self.__getattribute__(k) for k in self.all_props}
+    def to_dict(self, include_password=True):
+        d = {k: self.__getattribute__(k) for k in self.all_props}
+        if not include_password:
+            d.pop("password")
+        d["stats"] = dict(d["stats"])
+        return d
 
 
 class UserManager:
     def __init__(self, redis_pool):
         self.redis = redis.Redis(connection_pool=redis_pool)
         self.user_cache = {}
+
+    @staticmethod
+    def _get_key_from_name(name):
+        return f"nick-{name}"
 
     def _get_user_data(self, uid):
         log.debug(f"Retrieving user {uid} from db")
@@ -126,6 +135,16 @@ class UserManager:
     def _set_user_data(self, uid, json_data):
         log.debug(f"Setting user {uid} with data: {json_data}")
         return self.redis.set(uid, json_data)
+
+    def _update_user_nick(self, user):
+        # self.redis.delete(self._get_key_from_name(user.name))
+        self.redis.set(self._get_key_from_name(user.name), user.uid)
+
+    def get_uid(self, username):
+        uid = self.redis.get(self._get_key_from_name(username))
+        if uid:
+            return uid.decode()
+        return None
 
     def get_user(self, uid):
         """
@@ -163,8 +182,10 @@ class UserManager:
                     )
         self.user_cache[uid] = user
         self._update_user_data(uid, user)
+        self._update_user_nick(user)
         return user
 
     def _update_user_data(self, uid, user: User):
         data = json.dumps(user.to_dict())
         self._set_user_data(uid, data)
+

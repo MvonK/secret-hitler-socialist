@@ -7,18 +7,27 @@ class ChatBlock extends react.Component {
   constructor(props) {
     super(props);
     this.state = {textval: "", messages: []}
+    this.roomName = props.roomName
 
     this.handleChange = this.handleChange.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
+
   }
 
   componentDidMount() {
-    socket.on("chatMessageCreate", (msg) => this.newMessage(msg.author + ": " + msg.content))
+    socket.on("chatMessageCreate", (msg) => {
+      if(msg.room === this.roomName) {
+        this.newMessage(msg.author + ": " + msg.content)
+      }
+    })
+    socket.on("connect", () => {
+      this.setState({textval: ""})
+    })
   }
 
   newMessage(message) {
     console.log("New mesage omg lol whattt" + message)
-    let all_messages = this.state["messages"]
+    let all_messages = [...this.state["messages"]]
     all_messages.push(message)
     this.setState({messages: all_messages}, () => this.scrollToMyRef());
   }
@@ -26,6 +35,7 @@ class ChatBlock extends react.Component {
   handleChange(event) {
     this.setState({textval: event.target.value});
   }
+
   handleSubmit(event) {
     const msg = this.state.textval;
     this.setState({textval: ""})
@@ -49,7 +59,8 @@ class ChatBlock extends react.Component {
         </div>
 
         <form onSubmit={this.handleSubmit} style={{bottom:0, position:"absolute", width: "100%"}}>
-          <input type={"text"} value={this.state.textval} onChange={this.handleChange} style={{width:"80%"}}/>
+          <input type={"text"} value={this.state.textval} onChange={this.handleChange} style={{width:"80%"}} disabled={socket.disconnected}
+                 placeholder={socket.connected ? "Type in message..." : "You are not logged in"}/>
           <button className={"chatBtn"} onClick={this.handleSubmit} style={{width:"10%"}}>
             Send
           </button>
