@@ -118,8 +118,8 @@ class LobbyBlock extends react.Component {
 
   join(){
     console.log("Joining!")
-    this.setState({joined: true})
-    //TODO: Send the join game event
+    //this.setState({joined: true})
+    socket.emit("join_lobby", {lobby_id: this.state.id})
   }
 
   on(event, callback) {

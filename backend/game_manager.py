@@ -40,6 +40,8 @@ class Lobby:
             if user not in self.users:
                 self.users.add(user)
                 user.send("joined_game", {"lobby": self.to_dict()})
+        else:
+            raise GameManagerError("Game already started")
 
 
     def user_leave(self, user):
@@ -66,12 +68,12 @@ class GameManager:
     def get_lobby(self, name):
         game = self.lobbies.get(name)
         if not game:
-            raise GameDoesntExist
+            raise GameDoesntExist(f"Game with name {name} is not registered")
         return game
 
     def create_lobby(self, options):
         lobby = Lobby(options.pop("name", f"lobby-n-{random.randrange(10000)}"), sh.GameOptions(options))
-        self.lobbies[lobby.name] = lobby
+        self.lobbies[lobby.id] = lobby
         return lobby
 
     def user_join(self, user, lobby):

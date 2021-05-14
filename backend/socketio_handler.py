@@ -38,6 +38,7 @@ class UserContext:
             self.get_lobby(game_manager)
 
     def send(self, event_name, data):
+        log.debug(f"Sending {event_name} to {self.user.name}")
         fsio.emit(event_name, data, room=self.user.name)
 
     def get_lobby(self, game_manager):
@@ -146,6 +147,7 @@ class GameNamespace(fsio.Namespace):
         log.debug(f"SIO disconnecting user {ctx.user.uid}")
         del self.active_sessions[ctx.sid]
         if ctx.disconnect():
+            log.debug("Putting that user to rest for future reconnects")
             self.resting_sessions.append(ctx)
 
     def on_connect(self):
@@ -192,12 +194,13 @@ class GameNamespace(fsio.Namespace):
     @event_wrap()
     def on_create_lobby(self, ctx, options={}):
         lobby = self.game_manager.create_lobby(options)
-        self.game_manager.user_join(ctx, lobby.name)
+        self.game_manager.user_join(ctx, lobby.id)
         self.chat_rooms[lobby.id] = ChatRoom(lobby.id)
         fsio.emit("lobby_create", {"lobby": lobby.to_dict()}, broadcast=True)
 
     @event_wrap()
     def on_join_lobby(self, ctx, info={}):
+        log.debug(f"User {ctx.user.name} joining the lobby {info.get('lobby_id')}")
         self.game_manager.user_join(ctx, info.get("lobby_id"))
 
     @event_wrap()
@@ -205,7 +208,10 @@ class GameNamespace(fsio.Namespace):
         name = data.get("name", "general")
         log.debug(f"{ctx.user.name} wants to join the room {name}")
         room = self.chat_rooms.get(name)
-        room.user_join(ctx)
+        if room is not None:
+            room.user_join(ctx)
+        else:
+            log.error(f"Chatroom {name} doesnt exist")
 
     @event_wrap()
     def on_leave_chatroom(self, ctx, data={}):

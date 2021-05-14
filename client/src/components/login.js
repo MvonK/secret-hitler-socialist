@@ -20,8 +20,8 @@ class LoginBlock extends react.Component {
 
   getLoginInfo() {
     console.log("Getting login info")
-    socket.disconnect()
-    socket.connect()
+    //socket.disconnect()
+    //socket.connect()
     //socket.emit("fetchLoginInfo");
     console.log("Getting finished waiting for event ig")
   }

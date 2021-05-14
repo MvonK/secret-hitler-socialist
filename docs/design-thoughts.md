@@ -61,3 +61,7 @@ All sio events should be acknowledged when received. Input event will be a speci
 will require the client to send a sio event `event_response`. This should contain the input the player gives.
 Input events can be stuff like claims, voting, investigating, shooting, etc. Every input request will also contain
 a unique ID. This ID should be included in the response. 
+
+### Actually, socketio is an utter shit
+Its shit. Im gonna move to websockets with asyncio and similar pattern. It will be always event name plus some data.
+I will also move away from flask and eventlet because I wanna do asyncio and flask doesnt support that.
