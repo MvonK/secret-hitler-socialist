@@ -4,23 +4,78 @@ import random
 from backend.errors import *
 
 
+class WebEventManager(sh.EventManager):
+    def __init__(self, game, lobby):
+        super(WebEventManager, self).__init__(game)
+        self.lobby = lobby
+
+    def send_event(self, event, player, wait_for_ack=False):
+        data = event.to_dict()
+        name = "EVENT_" + data.pop("name")
+        data["lobby_id"] = self.lobby.id
+        player.send(name, data)
+
+    def send_input_request(self, request):
+        player = request.target
+        player.send("INPUT_REQUEST", {"type": request.type, "id": request.id, "description": request.description})
+
+
+class Lobby:
+    new_id = 78600
+
+    def __init__(self, name, options):
+        self.name = name
+        self.id = str(self.new_id)
+        Lobby.new_id += 1
+        self.options = options
+        self.users = set()
+        self.started = False
+        self.running = False
+        self.ended = False
+        self.game = None
+        self.event_manager = None
+
+    def user_join(self, user):
+        if not self.started:
+            if user not in self.users:
+                self.users.add(user)
+                user.send("joined_game", {"lobby": self.to_dict()})
+
+
+    def user_leave(self, user):
+        if not self.started:
+            self.users.remove(user)
+
+    def start(self):
+        self.game = sh.Game(self.name, self.options)
+        self.event_manager = WebEventManager(self.game, self)
+        self.game.play(self.users)
+
+    def to_dict(self):
+        ret = {}
+        for k in ("id", "name", "started", "running", "ended"):
+            ret[k] = self.__getattribute__(k)
+        ret["options"] = self.options.to_dict()
+        return ret
+
+
 class GameManager:
     def __init__(self):
-        self.games = {}
+        self.lobbies = {}
 
-    def get_game(self, name):
-        game = self.games.get(name)
+    def get_lobby(self, name):
+        game = self.lobbies.get(name)
         if not game:
             raise GameDoesntExist
         return game
 
-    def create_game(self, creator):
-        new_game = sh.Game(f"Game({random.randrange(10000)})")
-        self.games[new_game.name] = new_game
-        self.player_join(creator, new_game.name)
+    def create_lobby(self, options):
+        lobby = Lobby(options.pop("name", f"lobby-n-{random.randrange(10000)}"), sh.GameOptions(options))
+        self.lobbies[lobby.name] = lobby
+        return lobby
 
-    def player_join(self, player, game_name):
-        game = self.get_game(game_name)
-        pl = sh.Player(player)
-        game.player_join(pl)
+    def user_join(self, user, lobby):
+        if not isinstance(lobby, Lobby):
+            lobby = self.get_lobby(lobby)
+        lobby.user_join(user)
 

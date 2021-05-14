@@ -49,3 +49,15 @@ state changes.
 Redis is a simple key-value storage. It will be used to store mostly user data, such as ELO, password etc. Every client
 will be assigned a unique UID, when they create a new account. This will also be a key in the redis db, prefixed by
 `user-`. The value will be then json of the user. 
+
+### Events
+Event dispatching, management, and game updates is a complicated topic because it needs to be a 
+system that can be coded nicely in both frontend and backend. My current vision is to send only the
+game state update event, but attach in-game events to it. The ingame events should be fully self-sustainable, 
+meaning that the server needs to send the game state only at the beginning. The game state will also
+be an option in case a client disconnects.
+
+All sio events should be acknowledged when received. Input event will be a special type of event, which
+will require the client to send a sio event `event_response`. This should contain the input the player gives.
+Input events can be stuff like claims, voting, investigating, shooting, etc. Every input request will also contain
+a unique ID. This ID should be included in the response. 
