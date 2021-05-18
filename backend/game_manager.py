@@ -4,20 +4,21 @@ import random
 from backend.errors import *
 
 
-class WebEventManager(sh.EventManager):
+class AsyncioEventManager(sh.EventManager):
     def __init__(self, game, lobby):
-        super(WebEventManager, self).__init__(game)
+        super(AsyncioEventManager, self).__init__(game)
         self.lobby = lobby
 
     def send_event(self, event, player, wait_for_ack=False):
         data = event.to_dict()
         name = "EVENT_" + data.pop("name")
         data["lobby_id"] = self.lobby.id
-        player.send(name, data)
+        player.send(name, data, nowait=True)
 
     def send_input_request(self, request):
         player = request.target
-        player.send("INPUT_REQUEST", {"type": request.type, "id": request.id, "description": request.description})
+        player.send("INPUT_REQUEST", {"type": request.type, "id": request.id, "description": request.description}, nowait=True)
+        player.last_event_manager = self
 
 
 class Lobby:
@@ -35,11 +36,11 @@ class Lobby:
         self.game = None
         self.event_manager = None
 
-    def user_join(self, user):
+    async def user_join(self, user):
         if not self.started:
             if user not in self.users:
                 self.users.add(user)
-                user.send("joined_game", {"lobby": self.to_dict()})
+                await user.send("joined_game", {"lobby": self.to_dict()})
         else:
             raise GameManagerError("Game already started")
 
@@ -76,8 +77,8 @@ class GameManager:
         self.lobbies[lobby.id] = lobby
         return lobby
 
-    def user_join(self, user, lobby):
+    async def user_join(self, user, lobby):
         if not isinstance(lobby, Lobby):
             lobby = self.get_lobby(lobby)
-        lobby.user_join(user)
+        await lobby.user_join(user)
 

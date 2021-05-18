@@ -1,4 +1,3 @@
-import redis
 import json
 import logging
 import hashlib
@@ -121,7 +120,7 @@ class User:
 
 class UserManager:
     def __init__(self, redis_pool):
-        self.redis = redis.Redis(connection_pool=redis_pool)
+        self.redis = redis_pool
         self.user_cache = {}
 
     @staticmethod
@@ -130,23 +129,23 @@ class UserManager:
 
     def _get_user_data(self, uid):
         log.debug(f"Retrieving user {uid} from db")
-        return self.redis.get(f"{uid}")
+        return self.redis.execute("get", f"{uid}")
 
     def _set_user_data(self, uid, json_data):
         log.debug(f"Setting user {uid} with data: {json_data}")
-        return self.redis.set(uid, json_data)
+        return self.redis.execute("set", uid, json_data)
 
     def _update_user_nick(self, user):
         # self.redis.delete(self._get_key_from_name(user.name))
-        self.redis.set(self._get_key_from_name(user.name), user.uid)
+        return self.redis.execute("set", self._get_key_from_name(user.name), user.uid)
 
-    def get_uid(self, username):
-        uid = self.redis.get(self._get_key_from_name(username))
+    async def get_uid(self, username):
+        uid = await self.redis.execute("get", self._get_key_from_name(username))
         if uid:
             return uid.decode()
         return None
 
-    def get_user(self, uid):
+    async def get_user(self, uid):
         """
         Returns the User object. Returns None if the user does not exist.
         :param uid: UID of the user
@@ -155,7 +154,7 @@ class UserManager:
         if uid in self.user_cache:
             return self.user_cache[uid]
 
-        raw_data = self._get_user_data(uid)
+        raw_data = await self._get_user_data(uid)
         if raw_data is None:
             return None
         data = json.loads(raw_data.decode())
@@ -163,14 +162,14 @@ class UserManager:
         self.user_cache[uid] = user
         return user
 
-    def create_user(self, name, password):
+    async def create_user(self, name, password):
         """
         Creates a new user and saves it into db.
         :param name: Name of the user
         :param password: User's password
         :return: User created
         """
-        unique_id = self.redis.incr("incremental_id") * 7 + 999999
+        unique_id = (await self.redis.execute("incr", "incremental_id")) * 7 + 999999
         #hsh = hashlib.md5(f"{unique_id}-{datetime.datetime.now()}")
         uid = f"uid-{unique_id}"
         user = User(manager=self,

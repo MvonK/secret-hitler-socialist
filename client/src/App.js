@@ -4,6 +4,7 @@ import ChatBlock from "./components/chat"
 import LoginBlock from "./components/login";
 import LobbyList from "./components/lobby_list"
 import LobbyBlock from "./components/game";
+import OptionsEditorBlock from "./components/options_editor";
 import { Route, Switch, Redirect, useLocation } from 'react-router-dom';
 
 function App() {
@@ -14,16 +15,16 @@ function App() {
         Secret Hitler (at some point, hopefully)
       </h1>
       <Switch>
-        <Route path={"/lobbies"}>
+        <Route path={"/main"}>
           <table style={{width: "100%", height: "100%"}}>
             <tbody>
             <tr>
               <td>
-                <LobbyList/>
+                <LobbyList hidden={useLocation().pathname !== "/main/lobbies"}/>
+                <OptionsEditorBlock hidden={useLocation().pathname !== "/main/options"}/>
               </td>
               <td>
                 <ChatBlock roomName={"general"}
-
                 />
               </td>
             </tr>
@@ -36,13 +37,12 @@ function App() {
           <Redirect to={"/chat"}/>
         </Route>
         <Route path={"/game/*"}>
-          <LobbyBlock id={useLocation().pathname.split("/")[useLocation().pathname.split("/").length-1]}/>
+          <LobbyBlock id={useLocation().pathname.split("/")[useLocation().pathname.split("/").length - 1]}/>
         </Route>
         <Route path={"/"}>
-          <Redirect to={"/lobbies"}/>
+          <Redirect to={"/main/lobbies"}/>
         </Route>
       </Switch>
-      <Window/>
       {/*<img src={logo} className="App-logo" alt="logo" />*/}
     </div>
   );

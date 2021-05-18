@@ -48,12 +48,20 @@ class CardPlace extends react.Component {
     if (power == null){
       power = "None"
     }
-    const power_img = <img src={image_prefix + this.props.party + "Power" + power + ".png"} alt={this.props.party + " power to " + power}/>
+    let power_images = []
+    for (let i in this.props.power){
+      let name = this.props.power[i]
+      if (name === null){
+        name = "None"
+      }
+      const powername = name.charAt(0).toUpperCase() + name.slice(1);
+      power_images.push(<img src={image_prefix + this.props.party + "Power" + powername + ".png"} alt={this.props.party + " power to " + name}/>)
+    }
     const policy_img = <img src={image_prefix + this.props.party + "Policy.png"} alt={this.props.party + " policy"}/>
 
     return (
       <div style={{...this.props.style,  backgroundImage: `url(${image_prefix + this.props.party + "TrackCard.png"})`}}>
-        {(this.props.filled ? policy_img : power_img)}
+        {(this.props.filled ? policy_img : power_images)}
 
       </div>
     )
@@ -137,14 +145,29 @@ class LobbyBlock extends react.Component {
     this.on("joined_game", (data) => {
       this.setState({data: {...this.state.data, ...data.lobby}, joined: true})
     })
+    socket.emit("fetch_lobby", {"lobby_id": this.state.id})
   }
 
   render() {
+    let boards = []
+    console.log(this.state)
+    if (this.state.data["options"] !== undefined) {
+      for (let i = 0; i < this.state.data.options.parties_playing.length; i++) {
+        const party = this.state.data.options.parties_playing[i]
+        console.log(party)
+        boards.push(<PolicyBoard party={party} powers={this.state.data.options.board_format[party]}
+                                 policies={this.state.data.options.board[party]}/>)
+      }
+    }
+
+    console.log(boards)
+    //<PolicyBoard party={"Fascist"} powers={[null, null, "Inv", null, null]} policies={2}/>
+
     return (
       <div>
         This a game called {this.state.id}!
         {(this.state.joined ? <div>Joined</div> : <button onClick={this.join} style={{cursor: "pointer"}}>Join!</button>)}
-        <PolicyBoard party={"Fascist"} powers={[null, null, "Inv", null, null]} policies={2}/>
+        {boards}
         <ChatBlock roomName={this.state.id}/>
       </div>
     )

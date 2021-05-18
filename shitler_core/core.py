@@ -63,7 +63,7 @@ class Game:
             if p.alignment.party is Team.FAS:
                 self.send_event(PartyRevealed(self.hitler, "Hitler"), p)
 
-    def play(self, users):
+    async def play(self, users):
         # setup
         # self.players = list_of_players
         self.init_from_options(users)
@@ -82,8 +82,13 @@ class Game:
         while end == None:
             self.shuffle()
             if self.elect_government():
-                self.policy_playing()
+                await self.policy_playing()
         return end
+
+    def end(self, winning_team, reason):
+        self.running = False
+        self.ended = True
+        self.broadcast_event(GameEnd(winning_team, reason))
 
     def broadcast_event(self, event):
         self.event_manager.broadcast_event(event, self.players)
@@ -91,8 +96,8 @@ class Game:
     def send_event(self, event, user, wait_for_ack=False):
         return self.event_manager.send_event(event, user, wait_for_ack)
 
-    def request_input(self, request, wait_for_result=True):
-        return self.event_manager.input(request, wait_for_result)
+    def request_input(self, request):
+        return self.event_manager.input(request)
 
     @property
     def president(self):
@@ -137,7 +142,7 @@ class Game:
             random.shuffle(self.draw_deck)
             self.discard_deck = []
 
-    def elect_government(self, advance_president=True):
+    async def elect_government(self, advance_president=True):
         if advance_president:
             self.presindex = (self.presindex + 1) % len(self.players)
         while True:
@@ -154,7 +159,7 @@ class Game:
                 self.request_input(InputRequest(InputType.VOTE, p, "Vote for government"), wait_for_result=False))
 
         self.log.info("Gathering votes...")
-        votes = [r.wait() for r in reqs]
+        votes = [await r for r in reqs]
 
         jas = votes.count(True)
         neins = votes.count(False)
@@ -162,7 +167,7 @@ class Game:
         if jas >= neins:
             self.chancellor = chosen_chancellor
             if self.chairman_allowed:
-                self.chairman = self.request_input(
+                self.chairman = await self.request_input(
                     InputRequest(InputType.PLAYER, self.chancellor, "Pick your chairman"))
             else:
                 self.chairman = None
@@ -192,7 +197,7 @@ class Game:
             log.info(f"Executing action {action.__name__}")
             action()
 
-    def policy_playing(self):
+    async def policy_playing(self):
         hand = [self.draw_deck.pop(0) for i in range(3)]
         self.broadcast_deck_size()
         hand.sort()
@@ -201,17 +206,17 @@ class Game:
             self.log.info("Chairman saw " + seen + " policy")
             self.send_event(CardPeeked(seen), self.chairman)
 
-        discarded = self.request_input(
+        discarded = await self.request_input(
             InputRequest(InputType.PICK_POLICY, self.president, "Discard a policy", choices=hand))
         hand.remove(discarded)
         self.discard_deck.append(discarded)
 
         if self.veto:
-            chancellor_veto = self.request_input(
+            chancellor_veto = await self.request_input(
                 InputRequest(InputType.VOTE, self.chancellor, "Do you want to initiate a VETO?"))
             if chancellor_veto:
                 self.broadcast_event(ChancellorVetoProposed())
-                pres_veto = self.request_input(
+                pres_veto = await self.request_input(
                     InputRequest(InputType.VOTE, self.president, "Do you want to accept the VETO?"))
                 if pres_veto:
                     self.broadcast_event(VetoPassed())
@@ -220,7 +225,7 @@ class Game:
                 else:
                     self.broadcast_event(VetoRejected())
 
-        discarded = self.request_input(
+        discarded = await self.request_input(
             InputRequest(InputType.PICK_POLICY, self.chancellor, "Discard a policy", choices=hand))
         hand.remove(discarded)
         self.discard_deck.append(discarded)

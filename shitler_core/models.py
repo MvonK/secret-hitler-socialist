@@ -54,6 +54,7 @@ class GameOptions:
         self.from_balance(0, mode=self.mode)
 
         self.chairman_allowed = data.pop("chairman", self.chairman_allowed)
+        self.parties_playing = data.pop("parties_playing", self.parties_playing)
 
         for team, n in data.pop("deck_contents", {}).items():
             target = Team.from_string(team)
@@ -61,18 +62,28 @@ class GameOptions:
 
         for team, powers in data.pop("board_format", {}).items():
             target = Team.from_string(team)
-            for p in range(powers):
-                if powers[p] is not None:
+            if target not in self.board_format:
+                self.board_format[target] = []
+            for p in range(len(powers)):
+                if powers[p] != []:
                     assert isinstance(powers[p], list)
+                    while p >= len(self.board_format[target]):
+                        self.board_format[target].append([None])
                     self.board_format[target][p] = powers[p]
 
         for team, n in data.pop("starting_policies", {}).items():
             target = Team.from_string(team)
             self.board[target] = n
 
+        self.roles = ["Hitler"]
+        for team, n in data.pop("loyal_players", {}).items():
+            target = Team.from_string(team)
+            for i in range(n):
+                self.roles.append(target)
+
         if len(data) > 0:
             self.log.warning(f"Unrecognized parameters for initializing GameOptions: {' '.join(data.keys())}")
-        self.roles = None
+
 
     def from_balance(self, table_size, mode=None):
         # Balance has two parts, mode and number of players
@@ -145,5 +156,9 @@ class GameOptions:
                     if isinstance(dict_k, Team):
                         val[str(dict_k)] = val[dict_k]
                         del val[dict_k]
+            if isinstance(val, list):
+                for v in range(len(val)):
+                    if isinstance(val[v], Team):
+                        val[v] = str(val[v])
             ret[k] = val
         return ret

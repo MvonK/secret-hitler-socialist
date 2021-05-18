@@ -1,18 +1,21 @@
 import react from "react"
 import socket from "./socket"
+import {Redirect} from "react-router-dom";
 
 class ChatBlock extends react.Component {
   chatContainer = react.createRef();
 
   constructor(props) {
     super(props);
-    this.state = {textval: "", messages: []}
+    this.state = {textval: "", messages: [], redirect: undefined}
     this.roomName = props.roomName
     this.mystyle = {
       minWidth: "550px",
-        minHeight: "350px",
-        maxHeight: "200px",
-        position: "relative",
+      maxWidth: "1500px",
+      minHeight: "350px",
+      maxHeight: "200px",
+      position: "relative",
+      float: "right"
     }
 
     this.handleChange = this.handleChange.bind(this);
@@ -30,6 +33,12 @@ class ChatBlock extends react.Component {
       this.setState({textval: ""})
       socket.emit("join_chatroom", {"name": this.roomName})
     })
+
+    socket.on("joined_game", (data) => {
+      console.log("Redirecting to game " + data.lobby.id + " cuz joined")
+      this.setState({redirect: "/game/" + data.lobby.id})
+    })
+
     socket.emit("join_chatroom", {"name": this.roomName})
   }
 
@@ -61,7 +70,17 @@ class ChatBlock extends react.Component {
     this.chatContainer.current.scrollTo(0, scroll);
   };
 
+  componentDidUpdate(prevProps, prevState, snapshot) {
+    this.state.redirect = undefined
+  }
+
   render() {
+    if(this.state.redirect !== undefined){
+      return(
+        <Redirect to={this.state.redirect}/>
+      )
+    }
+
     return (
       <div className={"chat"} style={{...this.mystyle, ...this.props.style}}>
         <div ref={this.chatContainer}
@@ -71,7 +90,7 @@ class ChatBlock extends react.Component {
 
         <form onSubmit={this.handleSubmit} style={{float:"bottom", position:"absolute", width: "100%", bottom: "0px"}}>
           <input type={"text"} value={this.state.textval} onChange={this.handleChange} style={{width:"85%", float:"left"}} disabled={socket.disconnected}
-                 placeholder={socket.connected ? "Type in message..." : "You are not logged in"}/>
+                 placeholder={socket.ws.readyState === WebSocket.OPEN ? "Type in message..." : "You are not logged in"}/>
           <button className={"chatBtn"} onClick={this.handleSubmit} style={{width:"10%", float:"center"}}>
             Send
           </button>

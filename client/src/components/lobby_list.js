@@ -1,22 +1,22 @@
 import react from "react"
 import socket from "./socket"
-import { Redirect } from "react-router-dom"
+import {Redirect, useLocation} from "react-router-dom"
 
 class Lobby extends react.Component {
   constructor(props) {
     super(props);
     console.log(props)
-    this.state = {data: props.data, redirecting: false}
+    this.state = {data: props.data, redirecting_to: false}
     this.joinGame = this.joinGame.bind(this)
   }
 
   joinGame() {
-    this.setState({redirecting: true})
+    this.setState({redirecting_to: "/game/" + this.state.data.id})
   }
 
   render() {
-    if (this.state.redirecting) {
-      return <Redirect to={"/game/" + this.state.data.id}/>
+    if (this.state.redirecting_to !== false) {
+      return <Redirect to={this.state.redirecting_to}/>
     } else {
       return (
         <div id={"lobby" + this.state.data.id} onClick={this.joinGame} className={"hoverable"}>
@@ -31,11 +31,17 @@ class LobbyList extends react.Component {
   constructor(props) {
     super(props);
 
-    this.state = {lobbies: []}
+    this.state = {lobbies: [], redirecting_to: undefined}
     this.createGame = this.createGame.bind(this)
   }
 
+  componentWillUnmount() {
+
+    console.log("UNMOUNTING LOBBYLIST YYYYYYYYYYYYYYYYYYYYYYYYYYYYY")
+  }
+
   componentDidMount() {
+    console.log("MOUNTING LOBBYLIST AAAAAAAAAAAAAAAAAAAA")
     socket.on("lobby_create", (data) => {
       console.log("New lobby")
       console.log(data.lobby)
@@ -73,13 +79,29 @@ class LobbyList extends react.Component {
 
       this.setState({lobbies: lobbies})
     })
+
+
   }
 
   createGame() {
-    socket.emit("create_lobby")
+    // socket.emit("create_lobby")
+    this.setState({redirecting_to: "/main/options"})
+  }
+
+  componentDidUpdate(prevProps, prevState, snapshot) {
+    if (prevState.redirecting_to !== undefined) {
+      this.setState({redirecting_to: undefined})
+    }
   }
 
   render() {
+    if(this.state.redirecting_to !== undefined) {
+      return <Redirect to={this.state.redirecting_to}/>
+    }
+    if (window.location.pathname !== "/main/lobbies"){
+      return null
+    }
+
     return (
       <div id={"lobbylist"}>
         <button onClick={this.createGame}>Create game</button>

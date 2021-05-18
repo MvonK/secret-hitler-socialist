@@ -1,8 +1,9 @@
-import flask_socketio as fsio
-import flask as fl
+import asyncio
 import string
 import redis
 import inspect
+import aiohttp
+from aiohttp import web
 from backend.errors import *
 
 import logging
@@ -99,7 +100,12 @@ def event_wrap(get_context=True, get_context_lobby=False):
     return wrapgen
 
 
-class GameNamespace(fsio.Namespace):
+
+
+
+
+
+class GameNamespace():
     def __init__(self, path, user_manager, game_manager, sio):
         super().__init__(path)
         self.user_manager = user_manager

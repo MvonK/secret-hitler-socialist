@@ -1,9 +1,7 @@
 import logging
 from collections import Iterable
 from enum import Enum
-
-import eventlet
-
+import asyncio
 
 class InputType(Enum):
     PLAYER = "player"
@@ -69,25 +67,22 @@ class EventManager:
         for u in users:
             self.send_event(event, u)
 
-    def input(self, input_request, wait_for_result=True):
+    async def input(self, input_request):
         self.event_id += 1
         my_id = self.event_id
         self.events[my_id] = input_request
         input_request.send(self, my_id)
-        thread = self.wait_for_input(my_id)
-        if wait_for_result:
-            return thread.wait().data
-        else:
-            return thread
+        task = self.wait_for_input(my_id)
+        return task
 
     def wait_for_input(self, id):
-        return eventlet.spawn(self._wait_for_input, id)
+        return asyncio.create_task(self._wait_for_input(id))
 
-    def _wait_for_input(self, id):
+    async def _wait_for_input(self, id):
         while True:
             if id in self.received_events:
                 return self.received_events.pop(id)
-            eventlet.sleep(0.2)
+            await asyncio.sleep(0.2)
 
 
 '''class EventType(Enum):  # What events will server send to clients
@@ -156,7 +151,7 @@ class GameStart(Event):
 
 
 class GameEnd(Event):
-    fields = ["reason"]
+    fields = ["winning_team", "reason"]
 
 
 class RoleUpdate(Event):
