@@ -1,19 +1,21 @@
-import redis
+import aioredis
+import asyncio
 from backend.user_manager import UserManager
 
-redis_pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
-r = redis.Redis(connection_pool=redis_pool)
-#r.delete("1000013")
 
-user_manager = UserManager(redis_pool)
-#user_manager.create_user("Sam", "even-more-stronky-bonky-paswordy")
-#user_manager.create_user("Red", "newnamegobrr")
-#user_manager.create_user("a", "b")
-user_manager.create_user("b", "c")
-user_manager.create_user("c", "d")
-user_manager.create_user("d", "e")
+async def create_dummy_users():
+    redis_pool = aioredis.ConnectionsPool("redis://localhost:6379", maxsize=10, minsize=0)
+    #r.delete("1000013")
 
-for k in r.scan_iter():
-    print(k)
+    user_manager = UserManager(redis_pool)
+    #user_manager.create_user("Sam", "even-more-stronky-bonky-paswordy")
+    #await user_manager.create_user("Red2", "newnamegoadadbrr")
+    #user_manager.create_user("a", "b")
+    await user_manager.create_user("a", "b")
+    await user_manager.create_user("b", "c")
+    await user_manager.create_user("c", "d")
+    await user_manager.create_user("d", "e")
 
 
+if __name__ == "__main__":
+    asyncio.get_event_loop().run_until_complete(create_dummy_users())

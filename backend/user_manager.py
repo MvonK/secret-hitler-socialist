@@ -180,11 +180,11 @@ class UserManager:
                     stats={}
                     )
         self.user_cache[uid] = user
-        self._update_user_data(uid, user)
-        self._update_user_nick(user)
+        await self._update_user_data(uid, user)
+        await self._update_user_nick(user)
         return user
 
     def _update_user_data(self, uid, user: User):
         data = json.dumps(user.to_dict())
-        self._set_user_data(uid, data)
+        return self._set_user_data(uid, data)
 
