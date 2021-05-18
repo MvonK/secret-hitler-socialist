@@ -1,4 +1,3 @@
-import eventlet
 import shitler_core.core as sh
 import random
 from backend.errors import *
