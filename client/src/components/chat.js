@@ -34,9 +34,9 @@ class ChatBlock extends react.Component {
       socket.emit("join_chatroom", {"name": this.roomName})
     })
 
-    socket.on("joined_game", (data) => {
-      console.log("Redirecting to game " + data.lobby.id + " cuz joined")
-      this.setState({redirect: "/game/" + data.lobby.id})
+    socket.on("joined_game", (lobby) => {
+      console.log("Redirecting to game " + lobby.id + " cuz joined")
+      this.setState({redirect: "/game/" + lobby.id})
     })
 
     socket.emit("join_chatroom", {"name": this.roomName})

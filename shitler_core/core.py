@@ -1,5 +1,8 @@
+import traceback
+
 from .events import *
 from .models import *
+import shitler_core.powers as powers
 import random
 
 log = logging.getLogger("gamelog")
@@ -29,7 +32,7 @@ class Game:
         self.chairman = None
 
     def init_from_options(self, users):
-        self.options.setup_roles(len(self.players))
+        # self.options.setup_roles(len(self.players))
         self.chairman_allowed = self.options.chairman_allowed
         self.board = self.options.board
         self.board_format = self.options.board_format
@@ -52,21 +55,31 @@ class Game:
             self.players.append(Player(u, self, alignment))
 
         random.shuffle(self.players)
+        self.log.info("Players created, informing clients")
 
         # Distribute roles
         for p in self.players:
             if p.alignment.party is Team.FAS and p.alignment.role != "Hitler":
                 for f in self.fascists:
-                    self.send_event(PartyRevealed(f, Team.FAS), p)
+                    self.send_event(PartyRevealed(f, f.alignment, True), p)
+                #self.send_event(PartyRevealed(self.hitler, p.alignment, True), p)
+            elif p.alignment.role == "Hitler":
+                self.send_event(PartyRevealed(self.hitler, p.alignment, True), p)
             else:
-                self.send_event(PartyRevealed(p, p.alignment.party), p)
-            if p.alignment.party is Team.FAS:
-                self.send_event(PartyRevealed(self.hitler, "Hitler"), p)
+                self.send_event(PartyRevealed(p, p.alignment, True), p)
 
-    async def play(self, users):
+    async def play(self, users, event_manager):
+        self.event_manager = event_manager
+        try:
+            await self._play(users)
+        except Exception:
+            self.log.error(f"Game error! {traceback.format_exc()}")
+
+    async def _play(self, users):
         # setup
         # self.players = list_of_players
         self.init_from_options(users)
+        self.log.debug("Init from options completed successfully")
 
         end = None
 
@@ -76,12 +89,9 @@ class Game:
         self.log.info("Starting the actual game")
         self.broadcast_event(GameStart())
 
-        for p in self.players:
-            self.send_event(PartyRevealed(p, p.alignment.party), p)
-
         while end == None:
             self.shuffle()
-            if self.elect_government():
+            if await self.elect_government():
                 await self.policy_playing()
         return end
 
@@ -96,7 +106,8 @@ class Game:
     def send_event(self, event, user, wait_for_ack=False):
         return self.event_manager.send_event(event, user, wait_for_ack)
 
-    def request_input(self, request):
+    def request_input(self, request: InputRequest):
+        self.log.debug(f"Input request sent to {request.target.name}, asking for {request.type}")
         return self.event_manager.input(request)
 
     @property
@@ -122,18 +133,18 @@ class Game:
     def broadcast_deck_size(self):
         self.broadcast_event(DeckCountUpdate(len(self.draw_deck), len(self.discard_deck)))
 
-    def add_fail(self, chancellor=None):
+    async def add_fail(self, chancellor=None):
         if chancellor is None:
             chancellor = self.chancellor
         self.failed_governments += 1
         self.log.info("One more failed government")
         self.broadcast_event(GovernmentRejected(self.president, chancellor, self.failed_governments))
-        if self.failed_governments:
+        if self.failed_governments == 3:
             self.log.info("Topdeck")
             topdecked = self.draw_deck.pop(0)
             self.broadcast_event(TopDeck())
             self.broadcast_deck_size()
-            self.chosen_policy(self.draw_deck[0])
+            await self.chosen_policy(self.draw_deck[0])
 
     def shuffle(self):
         if len(self.draw_deck) < 3:
@@ -143,11 +154,12 @@ class Game:
             self.discard_deck = []
 
     async def elect_government(self, advance_president=True):
+        previous_president = self.president
         if advance_president:
             self.presindex = (self.presindex + 1) % len(self.players)
         while True:
-            chosen_chancellor = self.request_input(
-                InputRequest(InputType.PLAYER, self.president, "Pick your chancellor"))
+            chosen_chancellor = await self.request_input(InputRequest(InputType.PLAYER, self.president, "Pick your chancellor", exclude=(self.president, previous_president, self.chancellor)))
+
             if chosen_chancellor != self.president and chosen_chancellor != self.chancellor:
                 break
             self.log.warning("Invalid chancellor chosen")
@@ -156,7 +168,7 @@ class Game:
         reqs = []
         for p in self.players:
             reqs.append(
-                self.request_input(InputRequest(InputType.VOTE, p, "Vote for government"), wait_for_result=False))
+                self.request_input(InputRequest(InputType.VOTE, p, "Vote for government")))
 
         self.log.info("Gathering votes...")
         votes = [await r for r in reqs]
@@ -173,37 +185,37 @@ class Game:
                 self.chairman = None
             self.broadcast_event(GovernmentAccepted(self.president, self.chancellor, self.chairman))
             self.log.info("Government passed")
-            if self.chancellor.alignment.role == "Hitler" and self.hitler_can_overtake:
+            if self.chancellor.alignment.role == "Hitler" and self.hitler_zone:
                 # TODO: Hitler won victory ending idk
                 return
             self.failed_governments = 0
             return True
 
         else:
-            self.add_fail(chosen_chancellor)
+            await self.add_fail(chosen_chancellor)
         return False
 
-    def chosen_policy(self, policy):
+    async def chosen_policy(self, policy):
         self.board[policy] += 1
         track = self.board_format[policy]
         self.broadcast_event(PolicyPlayed(policy))
 
-        self.log.info(policy + " was elected")
+        self.log.info(f"{policy} was elected")
         if len(track) == self.board[policy]:
-            self.end = policy + " victory by laws!"
             return
 
         for action in track[self.board[policy] - 1]:
-            log.info(f"Executing action {action.__name__}")
-            action()
+            if action is not None:
+                log.info(f"Executing action {action}")
+                action_callback = getattr(powers, action)
+                await action_callback(self)
 
     async def policy_playing(self):
         hand = [self.draw_deck.pop(0) for i in range(3)]
         self.broadcast_deck_size()
-        hand.sort()
         if self.chairman_allowed:
             seen = random.choice(hand)
-            self.log.info("Chairman saw " + seen + " policy")
+            self.log.info(f"Chairman saw {seen} policy")
             self.send_event(CardPeeked(seen), self.chairman)
 
         discarded = await self.request_input(
@@ -220,7 +232,7 @@ class Game:
                     InputRequest(InputType.VOTE, self.president, "Do you want to accept the VETO?"))
                 if pres_veto:
                     self.broadcast_event(VetoPassed())
-                    self.add_fail(self.chancellor)
+                    await self.add_fail(self.chancellor)
                     return
                 else:
                     self.broadcast_event(VetoRejected())
@@ -231,7 +243,7 @@ class Game:
         self.discard_deck.append(discarded)
 
         self.broadcast_deck_size()
-        return self.chosen_policy(hand.pop(0))
+        return await self.chosen_policy(hand.pop(0))
 
 
 if __name__ == "__main__":

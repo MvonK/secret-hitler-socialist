@@ -3,26 +3,30 @@ class SecretHitlerSocialistError(BaseException):
         self.message = message
 
     def __str__(self):
-        return str(self.message)
+        return f"{self.message}"
 
 
-class SocketIOError(SecretHitlerSocialistError):
+class CommunicationError(SecretHitlerSocialistError):
     pass
 
 
-class NotLoggedIn(SocketIOError):
+class NotLoggedIn(CommunicationError):
     pass
 
 
-class UserDoesntExist(SocketIOError):
+class UserDoesntExist(CommunicationError):
     pass
 
 
-class UserNotInGame(SocketIOError):
+class UserNotInGame(CommunicationError):
     pass
 
 
-class UserNotInRoom(SocketIOError):
+class UserNotInRoom(CommunicationError):
+    pass
+
+
+class UserInDifferentGame(CommunicationError):
     pass
 
 

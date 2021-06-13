@@ -2,11 +2,16 @@ import logging
 from collections import Iterable
 from enum import Enum
 import asyncio
+from dataclasses import dataclass, asdict, field, Field
+from .models import *
+from backend.utils import dictify
 
 class InputType(Enum):
     PLAYER = "player"
     VOTE = "vote"
     PICK_POLICY = "policy"
+
+    to_dict = str
 
     def __str__(self):
         return self.value
@@ -18,6 +23,7 @@ class InputRequest:
         self.description = description
         self.target = target
         self.sent = False
+        self.exclude = exclude
 
         if not isinstance(exclude, Iterable):
             self.exclude = (exclude,)
@@ -36,11 +42,35 @@ class InputRequest:
 
         self._event_manager = manager
         self.id = id
+        self._future = asyncio.get_event_loop().create_future()
         self.sent = True
 
-    def set_data(self, data):  # TODO: Some data validation and parsing
-        self.data = data
+        manager.send_input_request(self)
+        return self._future
+
+    def set_data(self, data):
+        if self.type is InputType.PLAYER:
+            for p in self.choices:
+                if data == p.uid:
+                    self.data = p
+        elif self.type is InputType.VOTE:
+            self.data = bool(data)
+        elif self.type is InputType.PICK_POLICY:
+            try:
+                self.data = Team.from_string(data)
+            except ValueError:
+                return False
+        else:
+            return False
+
+        self._future.set_result(self.data)
         return True
+
+    def to_dict(self):
+        to_ret = {"id": self.id, "description": self.description}
+        to_ret["choices"] = dictify(self.choices)
+        to_ret["type"] = str(self.type)
+        return to_ret
 
 
 class EventManager:
@@ -59,30 +89,23 @@ class EventManager:
 
     def receive_input_response(self, id, data):
         req = self.events[id]
-        req.set_data(data)
-        del self.events[id]
-        self.received_events[id] = req
+        if req.set_data(data):
+            del self.events[id]
+            self.received_events[id] = req
+        else:
+            raise ValueError("Invalid input!")
 
     def broadcast_event(self, event, users):
         for u in users:
             self.send_event(event, u)
 
-    async def input(self, input_request):
+    def input(self, input_request):
         self.event_id += 1
         my_id = self.event_id
         self.events[my_id] = input_request
-        input_request.send(self, my_id)
-        task = self.wait_for_input(my_id)
-        return task
+        future = input_request.send(self, my_id)
 
-    def wait_for_input(self, id):
-        return asyncio.create_task(self._wait_for_input(id))
-
-    async def _wait_for_input(self, id):
-        while True:
-            if id in self.received_events:
-                return self.received_events.pop(id)
-            await asyncio.sleep(0.2)
+        return future
 
 
 '''class EventType(Enum):  # What events will server send to clients
@@ -114,121 +137,143 @@ def event_name_from_class(classname):
     return "".join(ret).upper()
 
 
+@dataclass()
 class Event:
-    name = "EMPTY_EVENT"
-    fields = ["name"]
-
-    def __init__(self, *args, **kwargs):
-        args = list(args)
-        self.data = {}
-        if "name" not in self.fields:
-            self.fields.append("name")
-        kwargs["name"] = kwargs.get("name", False) or event_name_from_class(self.__class__.__name__)
-
-        for field in self.fields:
-            try:
-                self.data[field] = kwargs.pop(field)
-            except KeyError:
-                if len(args) > 0:
-                    self.data[field] = args.pop(0)
-                else:
-                    raise TypeError(f"Event missing required field {field}")
-
-        if len(args) > 0:
-            logging.warning(f"Event args had unrecognized parameter with values {args}")
-        if len(kwargs) > 0:
-            logging.warning(f"Event kwargs had unrecognized parameters: {kwargs}")
-
-    def __dir__(self):
-        return self.fields
-
     def to_dict(self):
-        return self.data
+        to_ret = {"name": self.name}
+        for f in self.__dataclass_fields__.keys():
+            attr = self.__getattribute__(f)
+            if isinstance(attr, Player):
+                to_ret[f] = attr.user.uid
+            elif isinstance(attr, Team):
+                to_ret[f] = str(attr)
+            elif isinstance(attr, PartyAlignment):
+                to_ret[f] = attr.party if attr.role != "Hitler" else "Hitler"
+            else:
+                to_ret[f] = attr
+        return to_ret
+
+    def __post_init__(self):
+        self.name = event_name_from_class(self.__class__.__name__)
 
 
+@dataclass()
 class GameStart(Event):
     pass
 
 
+@dataclass()
 class GameEnd(Event):
-    fields = ["winning_team", "reason"]
+    winning_team: Team
+    reason: str
 
 
-class RoleUpdate(Event):
-    fields = ["changes"]
-
-
+@dataclass()
 class GovernmentProposed(Event):
-    fields = ["president", "chancellor"]
+    president: Player
+    chancellor: Player
 
 
+@dataclass()
 class GovernmentAccepted(Event):
-    fields = ["president", "chancellor", "chairman"]
+    president: Player
+    chancellor: Player
+    chairman: Player or None
 
 
+@dataclass()
 class GovernmentRejected(Event):
-    fields = ["president", "chancellor", "attempts"]
+    president: Player
+    chancellor: Player
+    attempts: int
 
 
+@dataclass()
 class PresidentDiscardingPolicy(Event):
     pass
 
 
+@dataclass()
 class ChancellorDiscardingPolicy(Event):
     pass
 
 
+@dataclass()
 class PolicyPlayed(Event):
-    fields = ["policy"]
+    policy: Team
 
 
+@dataclass()
 class TopDeck(Event):
     pass
 
 
+@dataclass()
 class PowerActivated(Event):
-    fields = ["power"]
+    power: str
 
 
-class PowerExecuted(Event):
-    fields = ["power", "power_params"]
-
-
+@dataclass()
 class PresidentClaim(Event):
-    fields = ["lib", "fas", "soc", "discarded"]
+    policy1: Team
+    policy2: Team
+    discarded_policy: Team
 
 
+@dataclass()
 class ChancellorClaim(Event):
-    fields = ["lib", "fas", "soc", "discarded"]
+    discarded_policy: Team
+    played_policy: Team
 
 
+@dataclass()
 class ChairmanClaim(Event):
-    fields = ["seen"]
+    seen: Team
 
 
+@dataclass()
 class CardPeeked(Event):
-    fields = ["card"]
+    policy: Team
 
 
+@dataclass()
 class ChancellorVetoProposed(Event):
     pass
 
 
+@dataclass()
 class VetoPassed(Event):
     pass
 
 
+@dataclass()
 class VetoRejected(Event):
     pass
 
 
+@dataclass()
 class PartyRevealed(Event):
-    fields = ["player", "party"]
+    player: Player
+    party: PartyAlignment
+    reveal_role: bool
+
+    def to_dict(self):
+        return {"name": self.name,
+                "player": self.player,
+                "party": "Hitler" if self.party.role == "Hitler" and self.reveal_role else self.party.party}
 
 
+@dataclass()
 class PlayerShot(Event):
-    fields = ["player"]
+    player: Player
 
 
+@dataclass()
 class DeckCountUpdate(Event):
-    fields = ["draw_size", "discard_size"]
+    draw_deck_size: int
+    discard_deck_size: int
+
+
+if __name__ == "__main__":
+    a = VetoRejected()
+    print(a.to_dict())

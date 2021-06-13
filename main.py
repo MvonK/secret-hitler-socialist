@@ -1,11 +1,10 @@
-import aiohttp
 from aiohttp import web
-import asyncio
 import hashlib
 import random
-import backend
 from backend.user_manager import UserManager
 from backend.game_manager import GameManager
+from backend.errors import *
+from backend.models import ChatRoom
 from backend.websocket_handler import WebSocketClientHandler
 
 import logging
@@ -30,46 +29,17 @@ logging.basicConfig(level=loglevel)
 log = logging.getLogger("mainlog")
 
 
-logging.getLogger('socketio').setLevel(loglevel)
-logging.getLogger('engineio').setLevel(loglevel)
-
-
-class ChatRoom:
-    def __init__(self, name):
-        self.name = name
-        self.members = set()
-
-    async def send_message(self, message, author):
-        if author in self.members:
-            for m in self.members:
-                await m.send("chat_message_create", {"author": author.user.name, "content": message, "room": self.name})
-        else:
-            log.warning(f"{author.user.name} tried to send a message to the chatroom {self.name} but is not connected")
-
-    async def user_join(self, user):
-        if not user in self.members:
-            self.members.add(user)
-            await user.send("chat_message_create", {"author": "Server",
-                                                    "content": f"You are now connected to the room {self.name}",
-                                                    "room": self.name})
-
-    def user_leave(self, user):
-        try:
-            self.members.remove(user)
-        except KeyError:
-            pass
-
-
 class Application:
     def __init__(self):
         self.app = web.Application()
         self.redis_pool = aioredis.ConnectionsPool("redis://localhost:6379", maxsize=10, minsize=0)
 
         self.user_manager = UserManager(self.redis_pool)
-        self.game_manager = GameManager()
+        self.game_manager = GameManager(self)
 
         self.connected_ws_clients = set()
         self.connected_http_clients = {}  # Session ID: User
+        self.resting_ws_clients = set()  # Disconnected WS clients that might come back
 
         self.chatrooms = {}
 
@@ -92,7 +62,7 @@ class Application:
         async def root(request):
             return web.FileResponse("client/build/index.html")
 
-        rootable = ["/lobbies", "/chat", "/secret", "/game", "/main"]
+        rootable = ["/", "/lobbies", "/chat", "/secret", "/game/{game_id}", "/main/{any}"]
         for r in rootable:
             routes.route("GET", r)(root)
 
@@ -146,25 +116,51 @@ class Application:
 
     async def websocket_handler(self, request):
         log.debug("New websocket connection")
-        handler = WebSocketClientHandler(self)
+        session = request.cookies.get("session")
+        handler = None
+        if session and session in self.connected_http_clients:  # Try to reconnect from resting clients
+            user = self.connected_http_clients[session]
+            for resting_client in self.resting_ws_clients:
+                if resting_client.user is user:
+                    handler = resting_client
+                    self.resting_ws_clients.remove(resting_client)
+                    handler.awaken()
+                    break
+
+            for cl in self.connected_ws_clients:
+                if cl.user is user:
+                    await cl.disconnect()
+            for cl in self.resting_ws_clients:
+                if cl.user is user:
+                    self.resting_ws_clients.remove(cl)
+
+        if handler is None:
+            handler = WebSocketClientHandler(self)
         self.connected_ws_clients.add(handler)
-        await handler.consume(request)
+        to_ret = await handler.consume(request)
 
         # Handler stopped processing messages. If it didn't initialize user, we can simply throw it away
+        self.connected_ws_clients.remove(handler)
         if handler.user is None:
-            self.connected_ws_clients.remove(handler)
+            pass
+        else:
+            handler.rest()
+            self.resting_ws_clients.add(handler)
 
-        #game_space = GameNamespace("/", user_manager, game_manager, sio)
+        return to_ret
 
-    def broadcast(self, event, data):
-        return asyncio.gather(*[client.send(event, data) for client in self.connected_ws_clients])
+    def broadcast(self, event_name, *args, **kwargs):  # Calls  the send_ + event name method of all connected clients
+        # return asyncio.gather(*[client.send(event, data) for client in self.connected_ws_clients])
+        for client in self.connected_ws_clients:
+            callback = client.__getattribute__("send_" + event_name)
+            callback(*args, **kwargs)
 
 
 if __name__ == "__main__":
     print("Starting..")
     app = Application()
     app.setup(webserver=not config.noweb)
-    web.run_app(app.app)
+    web.run_app(app.app, shutdown_timeout=5)
 
 
 

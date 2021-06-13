@@ -103,7 +103,7 @@ class LoginBlock extends react.Component {
     socket.on("login_info", (resp) => {
       console.log("Login info received")
       console.log(resp)
-      this.setState({loggedInUsername: resp.user.name})
+      this.setState({loggedInUsername: resp.name})
     });
     this.getLoginInfo();
   }

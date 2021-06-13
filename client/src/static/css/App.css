@@ -17,7 +17,7 @@
 
 .App-header {
   background-color: #282c34;
-  min-height: 10vh;
+  min-height: 5vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -42,4 +42,16 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.fas {
+  border: 0 solid #ff0000;
+  border-radius: 3px;
+  transition: box-shadow linear 0.15s;
+  box-shadow: 0 0 7px #ff0000;
+}
+
+.fas:hover {
+  outline: none;
+  box-shadow: 0 0 20px #ff0000;
 }

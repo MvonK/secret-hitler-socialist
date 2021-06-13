@@ -44,9 +44,9 @@ class LobbyList extends react.Component {
     console.log("MOUNTING LOBBYLIST AAAAAAAAAAAAAAAAAAAA")
     socket.on("lobby_create", (data) => {
       console.log("New lobby")
-      console.log(data.lobby)
+      console.log(data)
       let lobbies = [...this.state.lobbies]
-      lobbies.push(data.lobby)
+      lobbies.push(data)
       this.setState({"lobbies": lobbies})
     })
 
@@ -64,14 +64,14 @@ class LobbyList extends react.Component {
       this.setState({lobbies: lobbies})
     })
 
-    socket.on("lobby_change", (data) => {
-      console.log("Lobby edited! ID: " + data.lobby.id)
+    socket.on("lobby_change", (lobby) => {
+      console.log("Lobby edited! ID: " + lobby.id)
       let lobbies = []
       this.state.lobbies.forEach(filter)
 
       function filter(item, index) {
-        if (item.id === data.id) {
-          lobbies.push(data.lobby)
+        if (item.id === lobby.id) {
+          lobbies.push(lobby)
         } else {
           lobbies.push(item)
         }

@@ -5,8 +5,8 @@ from .models import *
 
 
 async def investigate(game):
-    inved = await game.request_input(InputRequest(InputType.PLAYER, game.president, "who you gonna investigate owo"))
-    game.send_event(PartyRevealed(inved, inved.alignment.party))
+    inved = await game.request_input(InputRequest(InputType.PLAYER, game.president, "who you gonna investigate owo", exclude=game.president))
+    game.send_event(PartyRevealed(inved, inved.alignment, False), game.president)
 
 
 async def shoot(game):
@@ -24,20 +24,20 @@ async def allow_veto(game):
     game.veto = True
 
 
-async def allow_hitler_overtake(game):
-    game.hitler_can_overtake = True
+async def hitler_zone_start(game):
+    game.hitler_zone = True
 
 
 async def special_election(game):
     game.log.info("Special election")
-    lastpres = game.president
+    lastpres = game.presindex
 
-    special_pres = await game.request_input(InputRequest(InputType.PLAYER, lastpres, "Pick a special election president"))
-    game.president = special_pres
+    special_pres = await game.request_input(InputRequest(InputType.PLAYER, game.president, "Pick a special election president"))
+    game.presindex = game.players.index(special_pres)
     game.shuffle()
-    if game.elect_government(advance_president=False):
+    if await game.elect_government(advance_president=False):
         await game.policy_playing()
-    game.president = lastpres
+    game.presindex = lastpres
 
 
 async def recruitment(game):
@@ -50,7 +50,7 @@ async def recruitment(game):
     recruited.alignment.party = Team.SOC
 
     for s in game.socialists:
-        game.send_event(PartyRevealed(recruited, Team.SOC), s)
+        game.send_event(PartyRevealed(recruited, recruited.alignment, False), s)
 
 
 async def five_year_plan(game):
@@ -70,30 +70,14 @@ async def bugging(game):
     game.log.info("Socialist bugging...")
     raise NotImplemented
 
-    msg = game.public_channel.send("Socialist is bugging someone. Wait for him...")
-    socs = []
-    for p in game.players:
-        if p.party == "Socialist":
-            socs.append(p)
-
-    bugger = random.choice(socs)
-    bugged = bugger.input(bugger.playerparse, True,
-                          "Hey, socialist. You are chosen to bug one of other players. Type number of player with dollar before.")
-    game.log.info(bugger.name + " bugged " + bugged.name)
-    seen_party = bugged.party
-    if seen_party == "Hitler":
-        seen_party = "Fascist"
-    for s in socs:
-        s.send(bugger.name + " bugged " + bugged.name + ". He is " + seen_party)
-
 
 async def congress(game):
     game.log.info("Congress")
     for s in game.socialists:
-        game.send_event(PartyRevealed(s, Team.SOC), s)
+        for revealed in game.socialists:
+            game.send_event(PartyRevealed(revealed, revealed.alignment, False), s)
 
 
 async def confession(game):
     target = await game.request_input(InputRequest(InputType.PLAYER, game.president, "Who do you confess your identity to", exclude=[game.president]))
-    revealed = "Hitler" if target.alignment.role == "Hitler" else target.alignment.party
-    game.send_event(PartyRevealed(game.president, revealed), target)
+    game.send_event(PartyRevealed(game.president, game.president.alignment, True), target)

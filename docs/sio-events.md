@@ -11,21 +11,29 @@ All events that can arrive from the server:
 - `content` - Contents of the message
 - `room` - The room this message was sent to
 
-`login_info` - A response to `fetchLoginInfo`. This is sent automatically on when a connection is established.
-- `user` - The `User` object the client is logged in as
+`login_info` - A response to `fetchLoginInfo` -> User
 
-`lobby_create` - A new lobby was created.
-- `lobby` - The game object that was created
+`lobby_create` - A new lobby was created -> Lobby
 
-`lobby_deleted` - A lobby was deleted.
+`lobby_deleted` - A lobby was deleted
 - `id` - The id of the lobby that was deleted
 
-`lobby_change` - Lobby info is updated
-- `lobby` - The new lobby data
+`lobby_change` - Lobby info is updated -> Lobby
 
-`joined_game` - You have joined a lobby
-- `lobby` - The lobby data
+`joined_game` - You have joined a lobby -> Lobby
 
+`error_message` - An error happened, the error details are in this message
+- `content` - The error described
+
+`game_event` - A game related even was sent
+- `lobby_id` - The lobby ID this event was sent to
+- `event` - The associated `GameEvent` object
+
+`input_request` - Client should submit an input relevant to gameplay
+- `id` - The request ID client should respond with
+- `type` - The request type (player, ja/nein, policy)
+- `choices` - A finite set of options the client can choose from (if empty, there are no limitations)
+- `description` - Some comment on what the input is about ("pick a player to shoot")
 
 ### From client
 All events coming from clients
@@ -69,3 +77,5 @@ Objects that might be sent over the network.
 - `policies` - A dictionary with the short party name (lib fas soc) as keys and the amount of their policies in play 
   as the value 
 
+`GameEvent` - Game related event happened. Fields are different for every event
+- `name` - The event unique name

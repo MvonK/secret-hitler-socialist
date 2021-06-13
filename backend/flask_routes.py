@@ -1,5 +1,6 @@
-import flask as fl
 import logging
+
+import flask as fl
 
 log = logging.getLogger("routes")
 

@@ -1,7 +1,5 @@
 import json
 import logging
-import hashlib
-import datetime
 
 """
 User should not be instantiated directly, you should use UserManager instead. Ideally, there will only be one instance
@@ -170,7 +168,7 @@ class UserManager:
         :return: User created
         """
         unique_id = (await self.redis.execute("incr", "incremental_id")) * 7 + 999999
-        #hsh = hashlib.md5(f"{unique_id}-{datetime.datetime.now()}")
+        # hsh = hashlib.md5(f"{unique_id}-{datetime.datetime.now()}")
         uid = f"uid-{unique_id}"
         user = User(manager=self,
                     name=name,
@@ -187,4 +185,3 @@ class UserManager:
     def _update_user_data(self, uid, user: User):
         data = json.dumps(user.to_dict())
         return self._set_user_data(uid, data)
-

@@ -103,10 +103,10 @@ class OptionsEditorBlock extends react.Component {
       const p = parties_playing[i]
       console.log(p)
       const party_options = this.state.party_options[p].current.state
-      options["starting_policies"][p] = party_options.starting_policies
+      options["starting_policies"][p] = parseInt(party_options.starting_policies)
       options["board_format"][p] = party_options.powers
-      options["deck_contents"][p] = party_options.amount_in_draw_deck
-      options["loyal_players"][p] = party_options.loyal_players
+      options["deck_contents"][p] = parseInt(party_options.amount_in_draw_deck)
+      options["loyal_players"][p] = parseInt(party_options.loyal_players)
     }
 
     socket.emit("create_lobby", {options: options})

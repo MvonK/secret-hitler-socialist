@@ -1,12 +1,7 @@
-import asyncio
-import string
-import redis
-import inspect
-import aiohttp
-from aiohttp import web
-from backend.errors import *
-
 import logging
+import string
+
+from backend.errors import *
 
 log = logging.getLogger("namespaces")
 
@@ -68,7 +63,7 @@ class ChatRoom:
 
     def send(self, author="server", content="empty content"):
         log.debug(f"room {self.name} sending out message {author}: {content}")
-        fsio.emit("chat_message_create", {"author":author, "content": content, "room": self.name}, room=self.name)
+        fsio.emit("chat_message_create", {"author": author, "content": content, "room": self.name}, room=self.name)
 
     def user_join(self, ctx):
         ctx.rooms.add(self)
@@ -96,13 +91,10 @@ def event_wrap(get_context=True, get_context_lobby=False):
                 return fn(*args, **kwargs)
             except UserNotInRoom as e:
                 fsio.emit("chat_message_create", {"author": "server", "content": str(e), "room": "general"})
+
         return wrapper
+
     return wrapgen
-
-
-
-
-
 
 
 class GameNamespace():
@@ -171,7 +163,8 @@ class GameNamespace():
                 for l in self.game_manager.lobbies.values():  # Send all lobby info
                     fsio.emit("lobby_create", {"lobby": l.to_dict()})
 
-                log.debug(f"User {ctx.user.name} now connected successfully. Uid stored in session is {fl.session.get('uid')}")
+                log.debug(
+                    f"User {ctx.user.name} now connected successfully. Uid stored in session is {fl.session.get('uid')}")
             except (NotLoggedIn, UserDoesntExist):
                 self.active_sessions.pop(fl.request.sid, None)
                 raise ConnectionRefusedError("Not logged in")

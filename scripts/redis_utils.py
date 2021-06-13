@@ -15,6 +15,7 @@ async def create_dummy_users():
     await user_manager.create_user("b", "c")
     await user_manager.create_user("c", "d")
     await user_manager.create_user("d", "e")
+    await user_manager.create_user("e", "f")
 
 
 if __name__ == "__main__":

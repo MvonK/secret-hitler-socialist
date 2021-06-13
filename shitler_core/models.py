@@ -1,10 +1,13 @@
 import logging
 from enum import Enum
+import copy
 
 
 class Player:
     def __init__(self, user, game, alignment):
         self.user = user
+        self.name = user.name
+        self.uid = user.uid
         self.parent_game = game
         self.log = logging.getLogger("game." + game.name + "." + self.name)
         self.alignment = alignment
@@ -27,6 +30,8 @@ class Team(Enum):
 
     @staticmethod
     def from_string(val):
+        if isinstance(val, Team):
+            return val
         if val == "Liberal":
             target = Team.LIB
         elif val == "Fascist":
@@ -37,8 +42,13 @@ class Team(Enum):
             raise ValueError
         return target
 
+    to_dict = str
+
     def __str__(self):
         return self.value
+
+    def __repr__(self):
+        return f"Team({self.value})"
 
 
 class PartyAlignment:
@@ -54,7 +64,7 @@ class GameOptions:
         self.from_balance(0, mode=self.mode)
 
         self.chairman_allowed = data.pop("chairman", self.chairman_allowed)
-        self.parties_playing = data.pop("parties_playing", self.parties_playing)
+        self.parties_playing = [Team.from_string(a) for a in data.pop("parties_playing", self.parties_playing)]
 
         for team, n in data.pop("deck_contents", {}).items():
             target = Team.from_string(team)
@@ -150,7 +160,7 @@ class GameOptions:
     def to_dict(self):
         ret = {}
         for k in ("mode", "roles", "parties_playing", "deck_contents", "board_format", "board"):
-            val = self.__getattribute__(k)
+            val = copy.copy(self.__getattribute__(k))
             if isinstance(val, dict):
                 for dict_k in list(val.keys()):
                     if isinstance(dict_k, Team):
