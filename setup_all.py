@@ -4,7 +4,7 @@ from backend.user_manager import UserManager
 
 
 async def create_dummy_users():
-    redis_pool = aioredis.ConnectionsPool("redis://redis:6379", maxsize=10, minsize=0)
+    redis_pool = aioredis.ConnectionsPool("redis://localhost:6379", maxsize=10, minsize=0)
     #r.delete("1000013")
 
     user_manager = UserManager(redis_pool)

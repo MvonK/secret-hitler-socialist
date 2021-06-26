@@ -9,7 +9,6 @@ import aiohttp
 
 from backend.errors import *
 from backend.game_manager import Lobby
-import discord.http
 
 from aiohttp import web
 
@@ -70,7 +69,7 @@ class WebSocketClientHandler(BaseClientHandler):
             session = request.cookies.get("session")
             user = request.app["app"].connected_http_clients.get(session)
             if not user:
-                self.send_error("You are not logged in")
+                self.send_error("NotLoggedIn", "You are not logged in")
                 await self.ws.close()
                 return self.ws
             else:

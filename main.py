@@ -32,7 +32,7 @@ log = logging.getLogger("mainlog")
 class Application:
     def __init__(self):
         self.app = web.Application()
-        self.redis_pool = aioredis.ConnectionsPool("redis://localhost:6379", maxsize=10, minsize=0)
+        self.redis_pool = aioredis.ConnectionsPool("redis://redis:6379", maxsize=10, minsize=0)
 
         self.user_manager = UserManager(self.redis_pool)
         self.game_manager = GameManager(self)

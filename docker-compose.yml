@@ -1,0 +1,24 @@
+version: '3.4'
+
+services:
+  server:
+    container_name: shs-api
+    build: .
+    volumes:
+    - .:/var/www
+    ports:
+    - 8080:8080
+    depends_on:
+      - redis
+
+  redis:
+    container_name: shs-redis
+    image: redis:6.2.4-alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - redis-data:/etc/redis/database
+
+volumes:
+  redis-data:
+    driver: local
